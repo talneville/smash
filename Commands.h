@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string.h>
+#include <map>
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -150,7 +151,9 @@ public:
    
 
 
-/*
+
+/*___________JOBS_________*/
+
 class JobsList;
 class QuitCommand : public BuiltInCommand {
 // TODO: Add your data members public:
@@ -161,17 +164,26 @@ class QuitCommand : public BuiltInCommand {
 
 
 
-
 class JobsList {
- public:
-    class JobEntry {
-    // TODO: Add your data members
-    // state - foreground/backround/stopped\
+  public:
+  class JobEntry {
+      // TODO: Add your data members
+      typedef enum {FOREGROUND, BACKGROUND, STOPPED, DEAD}State;
+      State state; 
+
+      public:
+      JobEntry(State _state);
+      ~JobEntry();
+      void changeState(State _state);
     // to add - if the job needs to be deleted
     };
  // TODO: Add your data members
- // vector(?) of jobEntry
- public:
+ // vector/map(?) of jobEntry 
+  
+  private:
+  std::map<int, JobEntry> job_list;
+  
+  public:
     JobsList();
     ~JobsList();
     void addJob(Command* cmd, bool isStopped = false);
@@ -182,8 +194,12 @@ class JobsList {
     void removeJobById(int jobId);
     JobEntry * getLastJob(int* lastJobId);
     JobEntry *getLastStoppedJob(int *jobId);
+    JobEntry * getMaxJobIdInList();
+    void deleteAllJobs();
   // TODO: Add extra methods or modify exisitng ones as needed
 };
+
+// job command class - with job list data??
 
 class JobsCommand : public BuiltInCommand {
  // TODO: Add your data members
@@ -217,6 +233,7 @@ class BackgroundCommand : public BuiltInCommand {
     void execute() override;
 };
 
+/*
 class TailCommand : public BuiltInCommand {
  public:
     TailCommand(const char* cmd_line);

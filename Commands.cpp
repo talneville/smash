@@ -79,7 +79,7 @@ const std::string _removeBackgroundSign(const char* cmd_line) {
     return str; 
 }
 
-// TODO: Add your implementation for classes in Commands.h 
+/*______________________________SMALL_SHELL_______________________________*/
 
 SmallShell::SmallShell() : name("smash"), current_directory("not set"), last_directory("not set") {
 // TODO: add your implementation
@@ -158,11 +158,40 @@ void SmallShell::executeCommand(const char *cmd_line) {
         return;
     }
     cmd->execute();
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
+}
+    // Please note that you must fork smash process for some commands (g, external commands....)
+
+
+
+/*______________________________JOBS_ENTRY______________________________*/
+
+JobsList::JobEntry::JobEntry(State _state) : state(_state) {}
+
+void JobsList::JobEntry::changeState(State _state){
+    this->state = _state;
 }
 
+/*______________________________JOBS_LIST_______________________________*/
 
-/*______________________________COMMANDS_______________________________*/
+
+JobsList::JobsList(){}
+
+void addJob(Command* cmd, bool isStopped = false){
+    //delet_all jobs()
+}
+void printJobsList();
+void killAllJobs();
+void removeFinishedJobs();
+JobEntry * getJobById(int jobId);
+void removeJobById(int jobId);
+JobEntry * getLastJob(int* lastJobId);
+JobEntry *getLastStoppedJob(int *jobId);
+JobEntry * getMaxJobIdInList();
+
+
+
+/*_____________________________COMMANDS_______________________________*/
+
 
 Command::Command(const char* cmd_line) : cmd_line(_removeBackgroundSign(cmd_line)), 
                 is_background_command(_isBackgroundComamnd(cmd_line)) {
@@ -303,6 +332,44 @@ void ExternalCommand::execute() {
     }
 }
 
+/*_________________JOBS_COMMANDS________________*/
+
+/*_________________JOBS_COMMAND________________*/
+
+JobsCommand::JobsCommand(const char* cmd_line, JobsList* jobs) : BuiltInCommand(cmd_line){
+
+}
+
+void JobsCommand::execute() {
+
+}
+
+/*_________________KILL_COMMAND________________*/
+
+KillCommand::KillCommand(const char* cmd_line, JobsList* jobs) : BuiltInCommand(cmd_line) {
+
+}
+
+void KillCommand::execute() {
+    
+}
+
+
+ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobs) : BuiltInCommand(cmd_line) {
+
+}
+
+void ForegroundCommand::execute() {
+    
+}
+
+BackgroundCommand::BackgroundCommand(const char* cmd_line, JobsList* jobs) : BuiltInCommand(cmd_line){
+
+}
+
+void BackgroundCommand::execute() {
+    
+}
 
 
 /*__________________COMMANDS_EXCEPTIONS___________________*/
