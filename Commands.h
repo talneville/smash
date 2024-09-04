@@ -5,68 +5,206 @@
 #include <string.h>
 #include <map>
 
+
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 /*
 * Macro providing a “safe” way to invoke system calls
 */
-#define DO_SYS( syscall ) do { \
-/* safely invoke a system call */ \
-if( (syscall) == -1 ) { \
-perror( #syscall ); \
-exit(1); \
-} \
-} while( 0 ) 
-
-
-/*______________COMMANDS_____________*/
+/* #define DO_SYS( syscall )                                                  \                                        \
+    std::string syscall_name = #syscall;                                   \
+    std::string error_message = "smash error: " + syscall_name + " failed";\
+    perror( error_message.c_str() );                                       \
+*/
+/*_____________________________COMMANDS_______________________________*/
 
 class Command {
-// TODO: Add your data members
   protected:
-    const std::string cmd_line;
+    std::string original_cmd_line;
+    std::string cmd_line;
     int num_of_args;
-    std::vector<std::string> args;
+    std::vector<std::string> args;  
     bool is_background_command;
+    int pid;
 
   public:
-    Command(const char* cmd_line);
+    Command(const char* cmd_line, int pid = -1);
     virtual ~Command() = default;
     virtual void execute() = 0;
+    bool isBackroundCommand() const;
+    bool isForegroundCommand() const;
+    void changePid(int pid);
+    void changeStateToFg(bool fg);
+    int getPid() const;
+    const std::vector<std::string> getArgs() const;
+    const std::string getCmdLine() const;
+    const std::string getOriginalCmdLine() const;
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
 };
 
-class BuiltInCommand : public Command {
- public:
-  BuiltInCommand(const char* cmd_line);
-  virtual ~BuiltInCommand() = default;
+
+/*_______________________JOBS_LIST_______________________________*/
+
+class JobsList;
+
+class JobsList {
+  public:
+  class JobEntry {
+    public:
+      typedef enum {FOREGROUND, BACKGROUND, STOPPED, DEAD}State;
+      JobEntry(const Command* _cmd, State _state, time_t timer);
+      ~JobEntry() = default;
+      void changeState(State _state);
+
+      /*_______________________GETTERS_______________________________*/
+      const Command* getCommand();
+      int getJobPid();
+      State getState();
+      time_t getTimer();
+      std::string getCmdLine();
+
+      /*_______________________SETTERS_______________________________*/
+      void setTimer();
+      
+      private:
+      const Command* cmd;
+      State state; 
+      time_t timer;
+      //int pid;
+      //std::string cmd_line;
+    // to add - if the job needs to be deleted
+    };
+ 
+  private:
+  std::map<int, JobEntry*> job_list;
+  int num_of_jobs;
+  
+  public:
+    JobsList(int _num_of_jobs = 0);
+    ~JobsList() = default;
+    void addJob(const Command* cmd, JobEntry::State state);
+    void printJobsList();
+    void printBeforeQuit();
+    void killAllJobs();
+    void removeFinishedJobs();
+    JobEntry* getJobById(int jobId);
+    JobEntry* getJobByPid(int pid);
+
+    void removeJobById(int jobId);
+    void removeJobByPid(int jobPid);
+    JobEntry* getLastStoppedJob();
+    int getMaxJobIdInList();
+    // void deleteAllJobs();
+    // void changeIsRunning();
+
 };
 
-class ExternalCommand : public Command {
-  const char* prog = "/bin/bash"; 
+/*_______________________SMALL_SHELL_______________________________*/
 
- public:
-  ExternalCommand(const char* cmd_line);
-  virtual ~ExternalCommand() = default;
-  void execute() override;
+class SmallShell {
+  private:
+    std::string name;
+    std::string current_directory;
+    std::string last_directory;
+    Command* current_command;
+    JobsList job_list;
+    int current_foreground_pid;
+    bool is_running;
+    SmallShell();
+
+ public:    
+
+    /*_______________________GETTERS_______________________________*/
+    std::string getName();
+    std::string getCurrentDirectory();
+    std::string getLastDirectory();
+    Command* getCurrentCommand();
+    int getCurrentForegroundPid();
+    JobsList::JobEntry* getMaxJob();
+    JobsList::JobEntry* getMaxStoppedJob();
+
+    /*_______________________SETTERS_______________________________*/
+    void changeName(std::string new_name);
+    void setCurrentDirectory(std::string directory);
+    void setLastDirectory(std::string directory);
+    void setCurrentCommand(Command* new_command);
+    void changeCurrentForegroundPid(int new_pid);
+    void changeStatusByPid(int pid, JobsList::JobEntry::State state);
+    void addJob(const Command* command, JobsList::JobEntry::State state);
+   
+    
+    /*_______________________METHODES_______________________________*/
+    const int NO_FOREGROUND_PROCESS = 0;
+    
+    SmallShell(SmallShell const&)      = delete; // disable copy ctor
+    void operator=(SmallShell const&)  = delete; // disable = operator
+    static SmallShell& getInstance() // make SmallShell singleton
+    {
+      static SmallShell instance; // Guaranteed to be destroyed.
+      // Instantiated on first use.
+      return instance;
+    }
+    ~SmallShell();
+    
+    bool isRunning();
+    void closeSmash();
+
+    bool isRedirection(const std::vector<std::string>& args);
+    bool isPipe(const std::vector<std::string>& args);
+    JobsList::JobEntry* jobExists(int job_id);
+    void printAllJobs();
+    void printAllJobsBeforeKill();
+    void killAllJobs();
+    void removeJobByPid(int job_pid);
+    Command *CreateCommand(const char* cmd_line);
+    void executeCommand(const char* cmd_line);
+};
+
+
+
+
+class BuiltInCommand : public Command {
+  public:
+    BuiltInCommand(const char* cmd_line, int pid = -1);
+    virtual ~BuiltInCommand() = default;
+};
+
+class ExternalCommand : public Command { 
+  std::string prog {"/bin/bash"};
+  std::string flag {"-c"};
+  
+  public:
+    ExternalCommand(const char* cmd_line);
+    virtual ~ExternalCommand() = default;
+    void execute() override;
 };
 
 class PipeCommand : public Command {
-  // TODO: Add your data members
- public:
-  PipeCommand(const char* cmd_line);
-  virtual ~PipeCommand() = default;
-  void execute() override;
+  public:
+    typedef enum {TO_STDOUT, TO_STERROR}PipeType;
+    PipeCommand(const char* cmd_line);
+    virtual ~PipeCommand() = default;
+    void execute() override;
+  
+  private:
+    Command* first_cmd;
+    Command* second_cmd;
+    PipeType type;
 };
 
 class RedirectionCommand : public Command {
- // TODO: Add your data members
- public:
-  explicit RedirectionCommand(const char* cmd_line);
-  virtual ~RedirectionCommand() = default;
-  void execute() override;
+  public:
+    typedef enum {OVERRIDE, APPEND}RedirectionType;
+    explicit RedirectionCommand(const char* cmd_line);
+    virtual ~RedirectionCommand() = default;
+    void execute() override;
+  
+  private:
+    Command* first_cmd;
+    RedirectionType type;
+    std::string output_file;
   //void prepare() override;
   //void cleanup() override;
 };
@@ -77,21 +215,21 @@ class RedirectionCommand : public Command {
 class ChpromptCommand : public BuiltInCommand {
   std::string new_name;
   public:
-    ChpromptCommand(const char* cmd_line);
+    ChpromptCommand(const char* cmd_line, int pid);
     virtual ~ChpromptCommand() = default;
     void execute() override;
 };
 
 class ShowPidCommand : public BuiltInCommand {
- public:
-    ShowPidCommand(const char* cmd_line);
+  public:
+    ShowPidCommand(const char* cmd_line, int pid);
     virtual ~ShowPidCommand() = default;
     void execute() override;
 };
 
 class GetCurrDirCommand : public BuiltInCommand {
- public:
-    GetCurrDirCommand(const char* cmd_line);
+  public:
+    GetCurrDirCommand(const char* cmd_line, int pid);
     virtual ~GetCurrDirCommand() = default;
     void execute() override;
 };
@@ -104,11 +242,10 @@ class ChangeDirCommand : public BuiltInCommand {
 
 public:
     //orig: ChangeDirCommand(const char* cmd_line, char** p_last_pwd);
-    ChangeDirCommand(const char* cmd_line);
+    ChangeDirCommand(const char* cmd_line, int pid);
     virtual ~ChangeDirCommand() = default;
     void execute() override;
 };
-
 
 /*_______EXTERNAL_COMMANDS_______*/
 
@@ -146,143 +283,144 @@ public:
       ~WhyDoYouMakeProblems() = default;
    };
 
+   class invalidJobId : public Exception {
+  
+     public:
+      invalidJobId(std::string error_message):Exception(error_message){};
+      ~invalidJobId() = default;
+   };
+
+   class InvalidArguments : public Exception {
+  
+     public:
+      InvalidArguments();
+      ~InvalidArguments() = default;
+   };
+
+   class FG_InvliadArgs : public Exception {
+      public:
+      FG_InvliadArgs();
+   };
+  
+  //used for BG and FG
+  class JobDoesntExist : public Exception {  
+     public:
+      JobDoesntExist(std::string error_message) : Exception(error_message) {}
+      ~JobDoesntExist() = default;
+  };
+
+  class jobsListIsEmpty : public Exception {
+  
+     public:
+      jobsListIsEmpty();
+      ~jobsListIsEmpty() = default;
+  };
+
+  class BG_InvliadArgs : public Exception {
+      public:
+      BG_InvliadArgs();
+   };
+   
+   class NoStoppedJobs : public Exception {
+  
+     public:
+      NoStoppedJobs();
+      ~NoStoppedJobs() = default;
+  };
+
+   class JobAlreadyRunning : public Exception {  
+     public:
+      JobAlreadyRunning(std::string error_message) : Exception(error_message) {}
+      ~JobAlreadyRunning() = default;
+  };
+
+   class TAIL_InvliadArgs : public Exception {
+      public:
+      TAIL_InvliadArgs();
+   };
+
 /*___________EXTERNAL_COMMANDS_EXCEPTIONS_________*/
 
    
 
 
 
-/*___________JOBS_________*/
-
-class JobsList;
-class QuitCommand : public BuiltInCommand {
-// TODO: Add your data members public:
-    QuitCommand(const char* cmd_line, JobsList* jobs);
-    virtual ~QuitCommand() = default;
-    void execute() override;
-};
-
-
-
-class JobsList {
-  public:
-  class JobEntry {
-      // TODO: Add your data members
-      typedef enum {FOREGROUND, BACKGROUND, STOPPED, DEAD}State;
-      State state; 
-
-      public:
-      JobEntry(State _state);
-      ~JobEntry();
-      void changeState(State _state);
-    // to add - if the job needs to be deleted
-    };
- // TODO: Add your data members
- // vector/map(?) of jobEntry 
-  
-  private:
-  std::map<int, JobEntry> job_list;
-  
-  public:
-    JobsList();
-    ~JobsList();
-    void addJob(Command* cmd, bool isStopped = false);
-    void printJobsList();
-    void killAllJobs();
-    void removeFinishedJobs();
-    JobEntry * getJobById(int jobId);
-    void removeJobById(int jobId);
-    JobEntry * getLastJob(int* lastJobId);
-    JobEntry *getLastStoppedJob(int *jobId);
-    JobEntry * getMaxJobIdInList();
-    void deleteAllJobs();
-  // TODO: Add extra methods or modify exisitng ones as needed
-};
-
-// job command class - with job list data??
-
 class JobsCommand : public BuiltInCommand {
  // TODO: Add your data members
  public:
-    JobsCommand(const char* cmd_line, JobsList* jobs);
+    JobsCommand(const char* cmd_line, int pid = -1);
     virtual ~JobsCommand() = default;
     void execute() override;
 };
 
 class KillCommand : public BuiltInCommand {
  // TODO: Add your data members
+ int signal_number;
+ int job_id;
+ JobsList::JobEntry* job_entry;
+ void checkValidArguments();
+ bool isNumber(const std::string& str);
  public:
-    KillCommand(const char* cmd_line, JobsList* jobs);
+    KillCommand(const char* cmd_line);
     virtual ~KillCommand() = default;
+    void execute() override;
+    int getSignal();
+    int getPid();
+};
+
+class QuitCommand : public BuiltInCommand {
+// TODO: Add your data members 
+public:
+    QuitCommand(const char* cmd_line);
+    virtual ~QuitCommand() = default;
     void execute() override;
 };
 
 class ForegroundCommand : public BuiltInCommand {
  // TODO: Add your data members
+ int job_id;
+ JobsList::JobEntry* job_entry;
+ void checkValidArguments();
  public:
-    ForegroundCommand(const char* cmd_line, JobsList* jobs);
+    ForegroundCommand(const char* cmd_line);
     virtual ~ForegroundCommand() = default;
     void execute() override;
+    int getPid();
+    Command* getJobsCommand();
 };
 
 class BackgroundCommand : public BuiltInCommand {
  // TODO: Add your data members
+ int job_id;
+ JobsList::JobEntry* job_entry;
+ void checkValidArguments();
  public:
-    BackgroundCommand(const char* cmd_line, JobsList* jobs);
+    BackgroundCommand(const char* cmd_line);
     virtual ~BackgroundCommand() = default;
     void execute() override;
+    int getPid();
+    Command* getJobsCommand();
 };
 
-/*
+
 class TailCommand : public BuiltInCommand {
+  int num_of_lines;
+  std::string filename;
+  off_t findPosition(int fd);
+
  public:
     TailCommand(const char* cmd_line);
     virtual ~TailCommand() = default;
     void execute() override;
+    void CheckValidArgs();
 };
 
 class TouchCommand : public BuiltInCommand {
  public:
-    TouchCommand(const char* cmd_line);
+    TouchCommand(const char* cmd_line) : BuiltInCommand(cmd_line){}
     virtual ~TouchCommand() = default;
     void execute() override;
 };
-*/
 
-
-/*______________SMALL_SHELL_____________*/
-
-class SmallShell {
-  private:
-    // TODO: Add your data members
-    // add the name of chprom - to change in main to print the name
-    // add vector(?) - 100 processes
-    // add vector(?) - jobs
-    std::string name;
-    std::string current_directory;
-    std::string last_directory;
-    SmallShell();
-
- public:
-    Command *CreateCommand(const char* cmd_line);
-    SmallShell(SmallShell const&)      = delete; // disable copy ctor
-    void operator=(SmallShell const&)  = delete; // disable = operator
-    static SmallShell& getInstance() // make SmallShell singleton
-    {
-      static SmallShell instance; // Guaranteed to be destroyed.
-      // Instantiated on first use.
-      return instance;
-    }
-    ~SmallShell();
-    void executeCommand(const char* cmd_line);
-    std::string getName();
-    std::string getCurrentDirectory();
-    std::string getLastDirectory();
-    void changeName(std::string new_name);
-    void setCurrentDirectory(std::string directory);
-    void setLastDirectory(std::string directory);
-    // TODO: add extra methods as needed
-    
-};
 
 #endif //SMASH_COMMAND_H_
